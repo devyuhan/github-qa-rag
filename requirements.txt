@@ -1,0 +1,9 @@
+llama-index-core
+llama-index-vector-stores-pinecone
+llama-index-embeddings-openai
+llama-index-llms-anthropic
+pinecone-client
+python-dotenv
+tree-sitter
+tree-sitter-language-pack
+nest-asyncio
