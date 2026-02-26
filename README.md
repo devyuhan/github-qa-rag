@@ -51,6 +51,19 @@ python -m src ask --eval
 
 Runs faithfulness and relevancy evaluation on each answer using LlamaIndex evaluators.
 
+## Example Questions
+
+Once a repo is ingested, try questions like:
+
+- "What is the high-level architecture of this project?"
+- "How does the app handle authentication and authorization?"
+- "How are workflows defined and executed?"
+- "What does the ActionService class do?"
+- "How are API routes organized?"
+- "What database does this project use?"
+- "What environment variables are required to run this project?"
+- "What integrations does this project support out of the box?"
+
 ## Project Structure
 
 ```
