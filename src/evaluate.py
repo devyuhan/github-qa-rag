@@ -3,6 +3,8 @@
 import asyncio
 
 from llama_index.core import Settings as LISettings
+from llama_index.core.base.response.schema import Response
+from llama_index.core.chat_engine.types import AgentChatResponse
 from llama_index.core.evaluation import FaithfulnessEvaluator, RelevancyEvaluator
 from llama_index.llms.anthropic import Anthropic
 
@@ -18,9 +20,17 @@ def _ensure_llm():
         )
 
 
+def _to_response(response) -> Response:
+    """Convert an AgentChatResponse to a Response for evaluators."""
+    if isinstance(response, Response):
+        return response
+    return Response(response=str(response), source_nodes=response.source_nodes)
+
+
 def evaluate(query: str, response) -> dict:
     """Run faithfulness and relevancy evaluations. Returns a dict of results."""
     _ensure_llm()
+    response = _to_response(response)
 
     faithfulness_eval = FaithfulnessEvaluator()
     relevancy_eval = RelevancyEvaluator()

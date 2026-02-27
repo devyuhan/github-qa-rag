@@ -1,4 +1,4 @@
-"""Retrieval + Claude generation."""
+"""Retrieval + Claude generation with conversation memory."""
 
 from llama_index.core import Settings as LISettings, VectorStoreIndex
 from llama_index.embeddings.openai import OpenAIEmbedding
@@ -9,8 +9,8 @@ from pinecone import Pinecone
 from src.config import Settings
 
 
-def _build_query_engine(settings: Settings):
-    """Connect to existing Pinecone index and return a query engine."""
+def _build_chat_engine(settings: Settings):
+    """Connect to existing Pinecone index and return a chat engine with memory."""
     # Configure global LlamaIndex settings
     LISettings.embed_model = OpenAIEmbedding(
         model=settings.embed_model_name,
@@ -43,7 +43,8 @@ def _build_query_engine(settings: Settings):
         top_k = 20  # fetch more candidates for the reranker
         print(f"  CohereRerank enabled (top_n={settings.rerank_top_n})")
 
-    return index.as_query_engine(
+    return index.as_chat_engine(
+        chat_mode="condense_plus_context",
         similarity_top_k=top_k,
         node_postprocessors=node_postprocessors or None,
     )
@@ -55,11 +56,17 @@ _engine = None
 def _get_engine():
     global _engine
     if _engine is None:
-        _engine = _build_query_engine(Settings())
+        _engine = _build_chat_engine(Settings())
     return _engine
 
 
 def ask(question: str):
-    """Ask a question and return the LlamaIndex Response object."""
+    """Ask a question and return the chat response (supports conversation memory)."""
     engine = _get_engine()
-    return engine.query(question)
+    return engine.chat(question)
+
+
+def reset():
+    """Clear conversation memory so the next question starts fresh."""
+    engine = _get_engine()
+    engine.reset()
