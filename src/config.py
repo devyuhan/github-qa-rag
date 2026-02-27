@@ -23,6 +23,12 @@ class Settings:
         default_factory=lambda: os.environ.get("PINECONE_INDEX_NAME", "github-qa")
     )
 
+    # Optional — CohereRerank
+    cohere_api_key: str = field(
+        default_factory=lambda: os.environ.get("COHERE_API_KEY", "")
+    )
+    rerank_top_n: int = 3
+
     # Defaults
     embed_model_name: str = "text-embedding-3-small"
     embed_dimensions: int = 1536

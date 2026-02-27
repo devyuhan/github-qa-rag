@@ -15,6 +15,7 @@ def _cmd_ingest(args):
         repo=args.repo,
         branch=args.branch,
         extensions=extensions,
+        enable_ctags=args.ctags,
     )
 
 
@@ -79,6 +80,11 @@ def main():
         nargs="+",
         default=None,
         help="File extensions to include (e.g. .py .md)",
+    )
+    ingest_p.add_argument(
+        "--ctags",
+        action="store_true",
+        help="Generate symbol-level documents via universal-ctags",
     )
 
     # --- ask ---

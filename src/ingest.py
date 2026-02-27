@@ -1,5 +1,6 @@
 """GitHub repo fetching, chunking, and Pinecone upsert."""
 
+import ast as python_ast
 import shutil
 import subprocess
 import tempfile
@@ -101,6 +102,74 @@ def _enrich_metadata(
         doc.set_content(header + doc.text)
 
 
+def _generate_symbol_documents(
+    repo_dir: Path, owner: str, repo: str
+) -> list[Document]:
+    """Walk Python files, extract class/function definitions via ast, return a Document per symbol."""
+    context_lines = 10
+    docs: list[Document] = []
+
+    for py_file in repo_dir.rglob("*.py"):
+        # Skip hidden dirs, __pycache__, etc.
+        parts = py_file.relative_to(repo_dir).parts
+        if any(p.startswith(".") or p == "__pycache__" for p in parts):
+            continue
+
+        try:
+            source = py_file.read_text(errors="replace")
+            tree = python_ast.parse(source, filename=str(py_file))
+        except (SyntaxError, ValueError):
+            continue
+
+        source_lines = source.splitlines()
+        rel_path = str(py_file.relative_to(repo_dir))
+
+        for node in python_ast.walk(tree):
+            if isinstance(node, python_ast.ClassDef):
+                kind = "class"
+            elif isinstance(node, (python_ast.FunctionDef, python_ast.AsyncFunctionDef)):
+                kind = "function"
+            else:
+                continue
+
+            name = node.name
+            line_no = node.lineno
+            start = max(0, line_no - 1)
+            end = min(len(source_lines), start + context_lines)
+            snippet = "\n".join(source_lines[start:end])
+
+            # Build scope from nesting (e.g. ClassName.method_name)
+            scope = _get_scope(tree, node)
+            qualified = f"{scope}.{name}" if scope else name
+
+            text = f"[{owner}/{repo}] {rel_path}\nSymbol: {kind} {qualified}\n\n{snippet}"
+
+            doc = Document(
+                text=text,
+                metadata={
+                    "file_path": rel_path,
+                    "symbol_name": name,
+                    "symbol_kind": kind,
+                    "is_doc": False,
+                    "source": "python_ast",
+                },
+                id_=f"symbol::{rel_path}::{name}::{line_no}",
+            )
+            docs.append(doc)
+
+    print(f"  Generated {len(docs)} symbol document(s) via Python AST.")
+    return docs
+
+
+def _get_scope(tree: python_ast.AST, target: python_ast.AST) -> str:
+    """Return the enclosing class/function name for a nested definition."""
+    for node in python_ast.walk(tree):
+        for child in python_ast.iter_child_nodes(node):
+            if child is target and isinstance(node, (python_ast.ClassDef, python_ast.FunctionDef, python_ast.AsyncFunctionDef)):
+                return node.name
+    return ""
+
+
 def _get_or_create_pinecone_index(settings: Settings):
     """Return a Pinecone index object, creating it if needed."""
     pc = Pinecone(api_key=settings.pinecone_api_key)
@@ -121,6 +190,7 @@ def ingest(
     repo: str,
     branch: str = "main",
     extensions: list[str] | None = None,
+    enable_ctags: bool = False,
 ) -> None:
     """Clone a GitHub repo, chunk it, and upsert into Pinecone."""
     settings = Settings()
@@ -158,11 +228,17 @@ def ingest(
         # --- 2. Enrich metadata + contextual headers ---
         _enrich_metadata(documents, owner, repo, repo_dir)
 
-        # --- 3. Split ---
-        nodes = _split_documents(documents)
-        print(f"  Created {len(nodes)} chunk(s).")
+        # --- 3. Symbol documents via Python AST (optional) ---
+        symbol_docs: list[Document] = []
+        if enable_ctags:
+            symbol_docs = _generate_symbol_documents(repo_dir, owner, repo)
 
-        # --- 4. Upsert into Pinecone ---
+        # --- 4. Split (symbol docs skip the splitter — already atomic) ---
+        nodes = _split_documents(documents)
+        nodes.extend(symbol_docs)
+        print(f"  Created {len(nodes)} chunk(s) ({len(symbol_docs)} from symbols).")
+
+        # --- 5. Upsert into Pinecone ---
         pinecone_index = _get_or_create_pinecone_index(settings)
         vector_store = PineconeVectorStore(pinecone_index=pinecone_index)
         storage_context = StorageContext.from_defaults(vector_store=vector_store)

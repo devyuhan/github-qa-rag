@@ -7,3 +7,4 @@ python-dotenv
 tree-sitter
 tree-sitter-language-pack
 nest-asyncio
+llama-index-postprocessor-cohere-rerank
